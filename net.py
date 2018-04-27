@@ -32,7 +32,7 @@ def generator( z, output_dim, reuse = False, alpha = 0.2, training = True ):
         logits = tf.layers.conv2d_transpose( x3, output_dim, 5, strides = 2, padding = 'same' )
         # 32 * 32 * output_dim
 
-        out = tf.tanh( x4 )
+        out = tf.tanh( logits )
 
         return out
 
@@ -64,8 +64,46 @@ def model_loss( input_real, input_z, output_dim, alpha = 0.2 ):
 
     Get the loss for the discriminator and generator
     :param input_real: Image from the real dataset
-    :param input_z:
-    :param output_dim:
-    :param alpha:
-    :return:
+    :param input_z: Z input
+    :param output_dim: The number of channels in the output image
+    :return: A tupe of (discriminator loss, generator loss)
     """
+    g_model = generator( input_z, output_dim, alpha = alpha )
+    d_model_real, d_logits_real = discriminator( input_real, alpha = alpha )
+    d_model_fake, d_logits_fake = discriminator( g_model, reuse = True, alpha = alpha )
+
+    d_loss_real = tf.reduce_mean( tf.nn.sigmoid_cross_entropy_with_logits(
+                                                                logits = d_logits_real,
+                                                                labels = tf.ones_like( d_model_real ) ) )
+    d_loss_fake = tf.reduce_mean( tf.nn.sigmoid_cross_entropy_with_logits(
+                                                                logits = d_logits_fake,
+                                                                labels = tf.zeros_like( d_model_fake ) ) )
+    g_loss = tf.reduce_mean( tf.nn.sigmoid_cross_entropy_with_logits(
+                                                                logits = d_logits_fake,
+                                                                labels = tf.ones_like( d_model_fake ) ) )
+
+    d_loss = d_loss_real + d_loss_fake
+
+    return d_loss, g_loss
+
+def model_opt( d_loss, g_loss, learning_rate, beta1 ):
+    """
+
+    Get optimization operations
+    :param d_loss: Discriminator loss Tensor
+    :param g_loss: Generator loss Tensor
+    :param learning_rate: Learining Rate Placeholder
+    :param beta1: The exponential decay rate for the 1st moment in the optimizer
+    :return: A tupe of (discriminator training operation, generator trianing operation)
+    """
+    # Get weight and bias to undate
+    t_vars = tf.trainable_variables()
+    d_vars = [var for var in t_vars if var.name.startwith( 'discriminator' )]
+    g_vars = [var for var in t_vars if var.name.startwith( 'generator' )]
+
+    # Optimize
+    with tf.control_dependencies( tf.get_collection( tf.GraphKeys.UPDATE_OPS ) ):
+        d_train_opt = tf.train.AdamOptimizer( learning_rate, beta1 = beta1 ).minimize( d_loss, val_list = d_vals )
+        g_train_opt = tf.train.AdamOptimizer( learning_rate, beta1 = beta1 ).minimize( g_loss, var_list = g_vals )
+
+    return d_train_opt, g_train_opt
