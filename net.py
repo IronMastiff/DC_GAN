@@ -107,3 +107,14 @@ def model_opt( d_loss, g_loss, learning_rate, beta1 ):
         g_train_opt = tf.train.AdamOptimizer( learning_rate, beta1 = beta1 ).minimize( g_loss, var_list = g_vals )
 
     return d_train_opt, g_train_opt
+
+class GAN:
+    def __init__( self, real_size, z_size, learning_rate, aplha = 0.2, beta1 = 0.5 ):
+        tf.reset_default_graph()
+
+        self.input_real, self.input_z = model_inputs( real_size, z_size )
+
+        self.d_loss, self.g_loss = model_loss( self.input_real, self.input_z, real_size[2], alpha = alpha )
+
+        self.d_opt, self.g_opt = model_opt( self.d_loss, self.g_loss, learning_rate, beta1 )
+
