@@ -3,6 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import argparse
 import numpy as np
+import preprocessor
 from scipy.io import loadmat
 
 from download_data import download_data as download_data
@@ -17,7 +18,7 @@ learning_rate = 0.001
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument( '-c', '--conf', default='conf/style.yml', help='the path to the conf file' )
+    parser.add_argument( '-c', '--conf', default='config.yml', help='the path to the conf file' )
     return parser.parse_args()
 
 def main( FLAGS ):
@@ -28,8 +29,9 @@ def main( FLAGS ):
     net = GAN( real_size, z_size, learning_rate, alpha = FLAGS.alpha, beta1 = FLAGS.beta1)
 
     '''--------Load data--------'''
-    train_data = loadmat( FLAGS.data_dir + FLAGS.train_data )
-    test_data = loadmat( FLAGS.data_dir + FLAGS.test_data )
+    train_data = loadmat( FLAGS.data_dir + '/' + FLAGS.train_data )
+    test_data = loadmat( FLAGS.data_dir + '/' + FLAGS.test_data )
+    dataset = preprocessor.Dataset( train_data, test_data )
 
     '''--------Build net--------'''
     saver = tf.train.Saver()
@@ -41,31 +43,32 @@ def main( FLAGS ):
     with tf.Session() as sess:
         sess.run( tf.global_variables_initializer() )
         for e in range( FLAGS.epochs ):
-            for x, y in dataset.batches( batch_size ):
+            for x, y in dataset.batches( FLAGS.batch_size ):
                 steps += 1
 
                 # Sample random noise for G
-                batch_z = np.random.uniform( -1, 1, size = ( batch_size, z_size ) )
+                batch_z = np.random.uniform( -1, 1, size = ( FLAGS.batch_size, z_size ) )
 
                 # Run optimizers
                 _ = sess.run( net.d_opt, feed_dict = { net.input_real: x, net.input_z: batch_z} )
                 _ = sess.run( net.g_opt, feed_dict = { net.input_z: batch_z, net.input_real: x} )
 
-                if steps % print_every == 0:
+                if steps % FLAGS.print_every == 0:
                     # At the end of each epoch, get the losses and print them out
                     train_loss_d = net.d_loss.eval( {net.input_z: batch_z, net.input_real: x} )
                     train_loss_g = net.g_loss.eval( {net.input_z: batch_z} )
 
                     print( 'Epoch {}/{}...'.format( e + 1, FLAGS.epochs ),
-                           'Discriminator Loss: {:.4f}'.format( train_loss_g) )
+                           'Discriminator Loss: {:.4f}'.format( train_loss_d ),
+                           'Generator loss: {:.4f}'.format( train_loss_g ) )
                     # Save losses to view after traning
                     losses.append( ( train_loss_d, train_loss_g ) )
 
-                if steps % show_every == 0:
+                if steps % FLAGS.show_every == 0:
                     gen_samples = sess.run( generator( net.input_z, 3, reuse = True, training = False ),
                                             feed_dict = {net.input_z: sample_z} )
                     samples.append( gen_samples )
-                    _ = utils.view_samples( -1, samples, 6, 12, figsize = figsize )
+                    _ = utils.view_samples( -1, samples, 6, 12, figsize = ( FLAGS.h_figsize, FLAGS.v_figsize ) )
                     plt.show()
 
             saver.save( sess, './checkpoints/generator.ckpt' )
